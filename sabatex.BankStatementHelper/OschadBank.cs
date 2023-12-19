@@ -91,7 +91,7 @@ public class OschadBank : ClientBankTo1CFormatConversion
             if (!ts.TryToDecimal(out decimal result))
                 throw new Exception(ErrorStrings.DoubleParse(ts));
             else
-                return result/100;
+                return result / 100;
         }
     }
 
@@ -130,17 +130,21 @@ public class OschadBank : ClientBankTo1CFormatConversion
             //char[] buffer = new char[BufferSize];
             try
             {
+                string? line = default!;
                 do
                 {
-                    var line = await reader.ReadLineAsync();
-                    if (line.Length == 0)
-                        continue;
-                    if (!int.TryParse(line[0]+"0",out int r)) continue; // start line
+                    line = await reader.ReadLineAsync();
+                    if (line != null)
+                    {
+                        if (line.Length == 0)
+                            continue;
+                        if (!int.TryParse(line[0] + "0", out int r)) continue; // start line
 
-                    var doc = GetDocument(line.TrimEnd()+";", AccNumber);
-                    if (doc != null) this.Documents.Add(doc);
-                    lineDoc++;
-                } while (!reader.EndOfStream);
+                        var doc = GetDocument(line.TrimEnd() + ";", AccNumber);
+                        if (doc != null) this.Documents.Add(doc);
+                        lineDoc++;
+                    }
+                } while (line != null);
             }
             catch (Exception e)
             {
