@@ -4,15 +4,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
-using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 
-namespace sabatex.V1C8.BankHelper
+
+namespace Sabatex.BankStatementHelper
 {
-    public interface IPrimaBankSk : I1CClientBankExchange
+    public class OtpBankSK : ClientBankTo1CFormatConversion
     {
-        const string delimiter = "\"\r\n";
+        const string delimiter = "\r\n";
         const int BufferSize = 1024;
 
         bool checkEnd(int position, ref char[] buffer)
@@ -27,12 +27,12 @@ namespace sabatex.V1C8.BankHelper
 
         string getValue(ref int pos, string s, string valueName)
         {
-            if (pos==s.Length)
+            if (pos == s.Length)
                 throw new Exception(ErrorStrings.TryGetValueFromEndStream(valueName));
             if (s[pos] == '\n' || s[pos] == '\r')
                 throw new Exception(ErrorStrings.TryGetValueFromEndStream(valueName));
 
-           
+
             int start = pos;
             if (s[pos] == '"')
             {
@@ -43,7 +43,13 @@ namespace sabatex.V1C8.BankHelper
             {
                 pos = s.IndexOf(';', start);
                 if (pos == -1)
-                    throw new Exception(ErrorStrings.DetermineEndDelimiterForValue(valueName));
+                {
+                    if (valueName == "Mena")
+                        return s.Substring(start);
+                    else
+                        throw new Exception(ErrorStrings.DetermineEndDelimiterForValue(valueName));
+                }
+                    
                 return s.Substring(start, pos++ - start);
             }
 
@@ -56,7 +62,7 @@ namespace sabatex.V1C8.BankHelper
                     case '"':
                         pos++;
                         if (pos == s.Length)
-                            return result.ToString(); 
+                            return result.ToString();
 
                         if (s[pos] == ';')
                         {
@@ -80,44 +86,44 @@ namespace sabatex.V1C8.BankHelper
             }
             throw new Exception(ErrorStrings.DetermineEndDelimiterForValue(valueName));
         }
-
-
-
         DocumentSection GetDocument(string s, string AccCode)
         {
             var doc = new DocumentSection();
-            Regex iban = new Regex(@"^\w{2}\d{10}\d*");
             int pos = 0;
-            string Datum = getValue(ref pos,s, "Datum");
-            if (Datum == "Datum") return null;//The header
-            string Valuta = getValue(ref pos,s, "Valuta");
-            string Suma = getValue(ref pos, s, "Suma").Replace(" ", "");
-            string Mena = getValue(ref pos, s, "Mena").ToUpper();
-            string Popis = getValue(ref pos, s, "Popis");
-            string DopolnitelnaInformacia = getValue(ref pos, s, "Doplnujuca informacia");
-            string Zostatok = getValue(ref pos, s, "Zostatok po transakcii");
-            if (Valuta == string.Empty) return null;
 
+
+
+            string Dátumútovania = getValue(ref pos,s,"Dátumútovania");
+            if (Dátumútovania == "Dátum útovania") return null;
+            string Dátumvaluty = getValue(ref pos, s, "Dátumvaluty");
+            string Protistrana = getValue(ref pos, s, "Protistrana");
+            string Kódbanky = getValue(ref pos, s, "Kódbanky");
+            string Komentár = getValue(ref pos, s, "Komentár");
+            string CS = getValue(ref pos, s, "CS");
+            string VS = getValue(ref pos, s, "VS");
+            string SS = getValue(ref pos, s, "SS");
+            string DB_CR = getValue(ref pos, s,"DB_CR");
+            string Suma = getValue(ref pos, s, "Suma");
+            string Mena = getValue(ref pos, s, "Mena");
+            // next line
+
+            if (Dátumútovania == "Dátum útovania") return null;
             try
             {
-                doc.Дата = Valuta.DateTo1C8Date();
+                doc.Дата = Dátumvaluty.DateTo1C8Date();
             }
             catch (Exception e)
             {
-                throw new Exception(string.Format("{0} for parametr Valuta", e.Message));
+                throw new Exception(string.Format("{0} for parametr Dátumvaluty", e.Message));
             }
 
             doc.КодВалюты = Mena;
-            decimal summ;
-            if (Suma.TryToDecimal(out summ))
+            if (Suma.TryToDecimal(out decimal summ))
                 doc.Сумма = summ;
             //doc.ДокументИД = 
-            doc.НазначениеПлатежа = Popis;
+            doc.НазначениеПлатежа = Komentár;
             //doc.Номер =  doc.Дата + summ.ToString();
-            var r = iban.Match(Popis);
-            string Protistrana = r.Success ? r.Value : "";
-
-            if (summ >= 0)
+            if (DB_CR != "DEBIT")
             {
                 doc.ПлательщикСчет = Protistrana;
                 doc.ПолучательСчет = AccCode;
@@ -127,11 +133,8 @@ namespace sabatex.V1C8.BankHelper
                 doc.ПолучательСчет = Protistrana;
                 doc.ПлательщикСчет = AccCode;
             }
-
             return doc;
-
         }
-
         string GetLineFromStream(StreamReader stream, char[] buffer, ref int chars)
         {
             int readChars = stream.Read(buffer, chars, BufferSize - chars);
@@ -151,7 +154,7 @@ namespace sabatex.V1C8.BankHelper
                     chars = chars - pos - delimiter.Length;
                     if (chars != 0)
                         Array.Copy(buffer, pos + delimiter.Length, buffer, 0, chars);
-                    return result.Append('"').ToString();
+                    return result.ToString();
                 }
                 result.Append(buffer[pos]);
                 pos++;
@@ -160,14 +163,13 @@ namespace sabatex.V1C8.BankHelper
             return result.ToString();
         }
 
-        public string ConvertTo1CFormat(Stream stream, string AccNumber)
+        string ConvertTo1CFormat(Stream stream, string AccNumber)
         {
             using (StreamReader reader = new StreamReader(stream, new Encoding1251()))
             {
                 var lineDoc = 1;
                 var chars = 0;
                 char[] buffer = new char[BufferSize];
-                _1CClientBankExchange _1CClientBank = new _1CClientBankExchange();
                 try
                 {
                     do
@@ -176,10 +178,10 @@ namespace sabatex.V1C8.BankHelper
                         if (chars == 0 || lineStr.Length == 0)
                             continue;
                         var doc = GetDocument(lineStr, AccNumber);
-                        if (doc != null) _1CClientBank.Documents.Add(doc);
+                        if (doc != null) Documents.Add(doc);
                         lineDoc++;
                     } while (chars != 0);
-                    return _1CClientBank.GetAsXML();
+                    return GetAsXML();
                 }
                 catch (Exception e)
                 {
@@ -188,6 +190,10 @@ namespace sabatex.V1C8.BankHelper
             }
         }
 
+        public override async Task ImportFromFileAsync(Stream stream, string fileExt, string accNumber = "")
+        {
+            await Task.FromResult(ConvertTo1CFormat(stream, accNumber));
+        }
 
     }
 }

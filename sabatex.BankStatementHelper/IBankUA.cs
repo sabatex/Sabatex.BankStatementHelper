@@ -3,17 +3,26 @@ using sabatex.Extensions.Text;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
 
-
-namespace sabatex.V1C8.BankHelper
+namespace Sabatex.BankStatementHelper
 {
-    public interface IGAZBankCSV : I1CClientBankExchange
+    public class IBankUA : ClientBankTo1CFormatConversion
     {
         const int BufferSize = 1024;
-        const string delimiter = "\n";
+        const string delimiter = "\r\n";
+        bool checkEnd(int position, ref char[] buffer)
+        {
+            foreach (var c in delimiter)
+            {
+                if (buffer[position++] != c) return false;
+            }
+            return true;
+        }
+
         string getValue(ref int pos, string s, string valueName)
         {
             if (pos == s.Length)
@@ -32,9 +41,7 @@ namespace sabatex.V1C8.BankHelper
             {
                 pos = s.IndexOf(';', start);
                 if (pos == -1)
-                {
                     throw new Exception(ErrorStrings.DetermineEndDelimiterForValue(valueName));
-                }
                 return s.Substring(start, pos++ - start);
             }
 
@@ -71,17 +78,19 @@ namespace sabatex.V1C8.BankHelper
             }
             throw new Exception(ErrorStrings.DetermineEndDelimiterForValue(valueName));
         }
-        string getDateValue(ref int pos, string s, string valueName)
+
+        string get1C8DateValue(ref int pos, string s, string valueName)
         {
-            var ts = getValue(ref pos, s, valueName).Trim();
+            var ts = getValue(ref pos, s, valueName);
             if (!ts.TryDateTo1C8Date(out string result))
                 throw new Exception(ErrorStrings.ConvertDataTo1C8FormatForField("'Дата операції'", ts));
             else
                 return result;
         }
+
         decimal getDecimalDateValue(ref int pos, string s, string valueName)
         {
-            var ts = getValue(ref pos, s, valueName).Trim();
+            var ts = getValue(ref pos, s, valueName);
             if (ts.Length == 0)
             {
                 return 0;
@@ -95,56 +104,31 @@ namespace sabatex.V1C8.BankHelper
             }
         }
 
-        bool checkEnd(int position, ref char[] buffer)
-        {
-            foreach (var c in delimiter)
-            {
-                if (buffer[position++] != c) return false;
-            }
-            return true;
-        }
-
         DocumentSection GetDocument(string s, string AccCode)
         {
             var document = new DocumentSection();
             int pos = 0;
-            string DateOperation = getDateValue(ref pos, s, "DATA_VYP").Trim();
-            string MFO = getValue(ref pos, s, "MFO").Trim();
-            getValue(ref pos, s, "AC");
-            string EDRPOU = getValue(ref pos, s, "OKPO").Trim();
-            getValue(ref pos, s, "NAME");
-            string DocummentNumber = getValue(ref pos, s, "ND").Trim();
-            string DocumentDate = getDateValue(ref pos, s, "DATA_D").Trim();
-            string OperationCode = getValue(ref pos, s, "DK").Trim();
-            string ClientMFO = getValue(ref pos, s, "MFO_KOR").Trim();
-            getValue(ref pos, s, "AC_KOR");
-            string ClientEDRPOU = getValue(ref pos, s, "OKPO_KOR").Trim();
-            string ClientName = getValue(ref pos, s, "NAME_KOR").Trim();
-            getValue(ref pos, s, "CUR_TAG");
-            string CurrencySymbolCode = getValue(ref pos, s, "CUR_CODE").Trim();
-            getValue(ref pos, s, "CUR_RATE");
-            getValue(ref pos, s, "AC_CUR_TAG");
-            getValue(ref pos, s, "AccountCur");
-            decimal Summ = getDecimalDateValue(ref pos, s, "SUM_PD_NOM");
-            getValue(ref pos, s, "SUM_PD_EQ");
-            string Description = getValue(ref pos, s, "PURPOSE").Trim();
-            getValue(ref pos, s, "IN_RST_NO");
-            getValue(ref pos, s, "IN_RST_EQ");
-            getValue(ref pos, s, "OUT_RST_NO");
-            getValue(ref pos, s, "OUT_RST_EQ");
-            getValue(ref pos, s, "DB_SUM_NOM");
-            getValue(ref pos, s, "CR_SUM_NOM");
-            getValue(ref pos, s, "DB_SUM_EQ");
-            getValue(ref pos, s, "CR_SUM_EQ");
-            getValue(ref pos, s, "DAT_OST_OB");
-            string Account = getValue(ref pos, s, "DB_IBAN");
-            string ClientAccount = getValue(ref pos, s, "CR_IBAN");
-            
-            //string ClientBankName = getValue(ref pos, s, "Назва банка");
-            // decimal Gryvna = getDecimalDateValue(ref pos, s, "Кредит");
-            if (OperationCode == "2")
+            string EDRPOU = getValue(ref pos, s, "ЄДРПОУ");
+            if (EDRPOU == "ЄДРПОУ") return null; // The header
+            string MFO = getValue(ref pos, s, "МФО");
+            string Account = getValue(ref pos, s, "Рахунок");
+            string CurrencySymbolCode = getValue(ref pos, s, "Валюта");
+            string DateOperation = get1C8DateValue(ref pos, s, "Дата операції");
+            string OperationCode = getValue(ref pos, s, "Код операції");
+            string ClientMFO = getValue(ref pos, s, "МФО банка");
+            string ClientBankName = getValue(ref pos, s, "Назва банка");
+            string ClientAccount = getValue(ref pos, s, "Рахунок кореспондента");
+            string ClientEDRPOU = getValue(ref pos, s, "ЄДРПОУ кореспондента");
+            string ClientName = getValue(ref pos, s, "Кореспондент");
+            string DocummentNumber = getValue(ref pos, s, "Документ");
+            string DocumentDate = get1C8DateValue(ref pos, s, "Дата документа");
+            decimal Debit = getDecimalDateValue(ref pos, s, "Дебет");
+            decimal Credit = getDecimalDateValue(ref pos, s, "Кредит");
+            string Description = getValue(ref pos, s, "Призначення платежу");
+            decimal Gryvna = getDecimalDateValue(ref pos, s, "Кредит");
+            if (Debit != 0)
             {
-                document.Сумма = Summ;
+                document.Сумма = Debit;
                 document.ПолучательОКПО = ClientEDRPOU;
                 document.ПолучательМФО = ClientMFO;
                 document.ПолучательСчет = ClientAccount;
@@ -154,9 +138,9 @@ namespace sabatex.V1C8.BankHelper
                 document.ПлательщикМФО = MFO;
                 document.ПлательщикСчет = Account;
             }
-            else 
+            else if (Credit != 0)
             {
-                document.Сумма = Summ;
+                document.Сумма = Credit;
                 document.ПолучательОКПО = EDRPOU;
                 document.ПолучательМФО = MFO;
                 document.ПолучательСчет = Account;
@@ -166,6 +150,12 @@ namespace sabatex.V1C8.BankHelper
                 document.ПлательщикСчет = ClientAccount;
                 document.Плательщик = ClientName;
             }
+            else if (OperationCode == "3")
+            {
+                return null;
+            }
+            else
+                throw new Exception("В виписцы выдсутні сумми операції !!! ");
 
             document.КодВалюты = CurrencySymbolCode;
             //Doc.ДатаПоступило = rec.DateOperation;
@@ -176,11 +166,21 @@ namespace sabatex.V1C8.BankHelper
 
             return document;
         }
-        string GetLineFromStream(StreamReader stream, char[] buffer, ref int chars)
+        async Task<(string result, int chars)> GetLineFromStreamAsync(StreamReader stream, char[] buffer, int chars)
         {
-            int readChars = stream.Read(buffer, chars, BufferSize - chars);
+            bool checkEnd(int position, ref char[] buffer)
+            {
+                foreach (var c in delimiter)
+                {
+                    if (buffer[position++] != c) return false;
+                }
+                return true;
+            }
+
+
+            int readChars = await stream.ReadAsync(buffer, chars, BufferSize - chars);
             if (readChars == 0 && chars == 0)
-                return string.Empty;
+                return (string.Empty, chars);
             int pos = 0;
             chars += readChars;
             var result = new StringBuilder();
@@ -195,43 +195,53 @@ namespace sabatex.V1C8.BankHelper
                     chars = chars - pos - delimiter.Length;
                     if (chars != 0)
                         Array.Copy(buffer, pos + delimiter.Length, buffer, 0, chars);
-                    return result.ToString();
+                    return (result.ToString(), chars);
                 }
                 result.Append(buffer[pos]);
                 pos++;
             }
             chars = 0;
-            return result.ToString();
+            return (result.ToString(), chars);
         }
 
-        public string ConvertTo1CFormat(Stream stream, string AccNumber)
+        async Task ImportFromCSV(Stream stream, string AccNumber)
         {
             using (StreamReader reader = new StreamReader(stream, new Encoding1251()))
             {
                 var lineDoc = 1;
-                var chars = 0;
                 char[] buffer = new char[BufferSize];
-                _1CClientBankExchange _1CClientBank = new _1CClientBankExchange();
+                (string result, int chars) lineStr = ("", 0);
                 try
                 {
                     do
                     {
-                        var lineStr = GetLineFromStream(reader, buffer, ref chars);
-                        if (chars == 0 || lineStr.Length == 0)
+                        lineStr = await GetLineFromStreamAsync(reader, buffer, lineStr.chars);
+                        if (lineStr.chars == 0 || lineStr.result.Length == 0)
                             continue;
-                        if (lineStr[0] == 'D') continue; // start line
-
-                        var doc = GetDocument(lineStr.TrimEnd()+";", AccNumber);
-                        if (doc != null) _1CClientBank.Documents.Add(doc);
+                        var doc = GetDocument(lineStr.result, AccNumber);
+                        if (doc != null) AddDocument(doc);
                         lineDoc++;
-                    } while (chars != 0);
-                    return _1CClientBank.GetAsXML();
+                    } while (lineStr.chars != 0);
                 }
                 catch (Exception e)
                 {
                     throw new Exception(ErrorStrings.InLine(lineDoc, e.Message));
                 }
             }
+        }
+        public override async Task ImportFromFileAsync(Stream stream, string fileExt, string accNumber = "")
+        {
+            switch (fileExt.ToUpper())
+            {
+                case ".CSV":
+                    await ImportFromCSV(stream, accNumber);
+                    break;
+                default:
+                    throw new Exception($"Для клінтбанка iBank, файл з розширенням {fileExt} не підтримується. Можливі типи файлів CSV");
+
+            }
+
+
         }
     }
 }

@@ -9,9 +9,9 @@ using System.Threading.Tasks;
 using System.Xml;
 
 
-namespace sabatex.V1C8.BankHelper
+namespace Sabatex.BankStatementHelper
 {
-    public interface IiFobs : I1CClientBankExchange
+    public class IFobs : ClientBankTo1CFormatConversion
     {
         const int BlockSize = 660;
         const int BufferSize = 1024;
@@ -361,7 +361,7 @@ namespace sabatex.V1C8.BankHelper
 
         }
 
-        public async Task ImportFromFileAsync(Stream stream, string fileExt, string accNumber = "")
+        public override async Task ImportFromFileAsync(Stream stream, string fileExt, string accNumber = "")
         {
             switch (fileExt.ToUpper())
             {
