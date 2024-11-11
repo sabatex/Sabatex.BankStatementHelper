@@ -199,7 +199,7 @@ public class PrivatUA : ClientBankTo1CFormatConversion
                 do
                 {
                     lineStr = await GetLineFromStreamAsync(reader, buffer, lineStr.chars);
-                    if (lineStr.chars == 0 || lineStr.result.Length == 0)
+                    if (lineStr.result.Length == 0)
                         continue;
                     var doc = GetDocument(lineStr.result.TrimEnd(), accNumber);
                     if (doc != null) this.Documents.Add(doc);
